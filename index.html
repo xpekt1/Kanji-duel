@@ -111,7 +111,17 @@ ul{list-style:none;margin:0;padding:0}
     <p class="err" id="serr"></p>
     <p class="dim" id="netinfo">Connecting…</p>
     <button id="golocal" style="width:100%" disabled>Play on one phone (pass it around)</button>
+    <button id="opendict" style="width:100%;margin-top:8px" disabled>Word dictionary — see every word in the game</button>
   </div>
+</section>
+
+<section id="dict" hidden>
+  <div class="row" style="align-items:center"><h2 style="margin:0">Word dictionary</h2><button id="closedict" style="flex:none">Back</button></div>
+  <input id="dq" type="search" placeholder="Search: 学, がく, school…" autocomplete="off" style="margin-top:12px">
+  <div class="chips" id="dlv" style="margin-top:8px"><button data-l="5" class="on">N5</button><button data-l="4" class="on">N4</button><button data-l="3" class="on">N3</button><button data-l="2" class="on">N2</button><button data-l="1" class="on">N1</button></div>
+  <p class="dim" id="dcount"></p>
+  <ul class="words" id="dlist"></ul>
+  <button id="dmore" style="width:100%;margin-top:10px" hidden>Show more</button>
 </section>
 
 <section id="lobby" hidden>
@@ -209,7 +219,7 @@ let room=null,R=null,isHost=false,myPeer=null,myName='',code='',secs=12,G=null,d
 try{myName=localStorage.getItem('kd-name')||''}catch(e){}
 $('#name').value=myName;
 
-function show(id){for(const s of ['setup','lobby','local','game','over'])$('#'+s).hidden=s!==id}
+function show(id){for(const s of ['setup','lobby','local','game','over','dict'])$('#'+s).hidden=s!==id}
 
 /* ---------- game engine (runs on host / local phone) ---------- */
 function resolve(input,k,used,lv){
@@ -371,6 +381,8 @@ function render(){
     $('#lwait').textContent=isHost?(ps.length<2?'Waiting for friends… (you can also start alone to practise)':`${ps.length} players · ${gmode==='speed'?'Speed reading':'Duel'} · ${secs} s · ${lvName(pool(levels).lv)}`):(ps.some(p=>p.host)?'Waiting for the host to start…':'Host not here yet — check the code.');
   }else if(mode==='local'){
     show('local');
+  }else if(mode==='dict'){
+    show('dict');
   }else show('setup');
 }
 function renderGame(){
@@ -434,6 +446,29 @@ function renderLocal(){
   $('#lnames').innerHTML=localNames.map((n,i)=>`<li><button class="avbtn" data-av="${i}" aria-label="Change character">${avatar(localA[i])}</button><input data-i="${i}" maxlength="14" value="${esc(n)}">${localNames.length>1?`<button data-x="${i}" aria-label="Remove">✕</button>`:''}</li>`).join('');
 }
 
+/* ---------- dictionary ---------- */
+let dLv=[5,4,3,2,1],dShown=120,dRes=[];
+function dictSearch(){
+  const q=$('#dq').value.trim().toLowerCase(),h=toHira(q);
+  dRes=Object.keys(DICT).filter(w=>{const d=DICT[w];if(!dLv.includes(d.l))return false;if(!q)return true;
+    return w.includes(q)||d.r.includes(h)||d.m.toLowerCase().includes(q)});
+  if(q)dRes.sort((a,b)=>{const s=w=>w===q||DICT[w].r===h?0:w.startsWith(q)||DICT[w].r.startsWith(h)?1:2;return s(a)-s(b)||a.length-b.length});
+  else dRes.sort((a,b)=>DICT[b].l-DICT[a].l||DICT[a].r.localeCompare(DICT[b].r,'ja'));
+  dShown=120;dictRender();
+}
+function dictRender(){
+  $('#dcount').textContent=`${dRes.length.toLocaleString()} words`;
+  $('#dlist').innerHTML=dRes.slice(0,dShown).map(w=>wordLi(w)).join('')||'<li class="dim">No words found.</li>';
+  $('#dmore').hidden=dRes.length<=dShown;
+}
+$('#opendict').addEventListener('click',()=>{mode='dict';render();dictSearch();window.scrollTo(0,0)});
+$('#closedict').addEventListener('click',()=>{mode='setup';render()});
+let dT;$('#dq').addEventListener('input',()=>{clearTimeout(dT);dT=setTimeout(dictSearch,150)});
+$('#dlv').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const l=+b.dataset.l;
+  if(dLv.includes(l)){if(dLv.length>1)dLv=dLv.filter(x=>x!==l)}else dLv.push(l);
+  for(const x of $('#dlv').children)x.classList.toggle('on',dLv.includes(+x.dataset.l));dictSearch()});
+$('#dmore').addEventListener('click',()=>{dShown+=200;dictRender()});
+
 /* ---------- timer ---------- */
 setInterval(()=>{
   if(isHost||mode==='local')hostTick();
@@ -491,7 +526,7 @@ $('#play').addEventListener('submit',e=>{
 render();
 (async()=>{
   try{await loadWords()}catch(e){$('#netinfo').textContent='Could not load the word list — reload the page.';return}
-  $('#golocal').disabled=false;renderLv();
+  $('#golocal').disabled=false;$('#opendict').disabled=false;renderLv();
   room=typeof Peer==='function'?NET:null;
   if(room){$('#create').disabled=false;$('#join').disabled=false;$('#netinfo').textContent='Online ready — create a room and send friends this page + the code. Or play on one phone:'}
   else $('#netinfo').textContent='Online play couldn’t load (check your internet) — you can still play on one phone:';
